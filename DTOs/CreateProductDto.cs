@@ -18,6 +18,10 @@ namespace NaturalShop.API.DTOs
         [Range(0, int.MaxValue, ErrorMessage = "Stock must be 0 or greater")]
         [DefaultValue(0)]
         public int? Stock { get; set; }
+        public string Code { get; set; } = string.Empty;
+        public string[]? Images { get; set; }
+        public string? StoryText { get; set; }
+        public string[]? StoryImages { get; set; }
     }
 }
 

@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 
 namespace NaturalShop.API.Models
 {
@@ -16,10 +17,15 @@ namespace NaturalShop.API.Models
         public int Stock { get; set; }
         public string? StoryText { get; set; }
         // StoryImages is an array of strings
-        public string[]? StoryImages { get; set; }    
+        public string[]? StoryImages { get; set; }
         public string Code { get; set; } = string.Empty;
         // Images array for gallery
         public string[]? Images { get; set; }
+
+        // Navigation property (bir ürün birçok OrderItem'a gider)
+        // JsonIgnore: Döngüsel referansı önlemek için JSON serialization'dan hariç tutulur
+        [JsonIgnore]
+        public ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
     }
 }
 

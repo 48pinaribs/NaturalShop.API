@@ -171,3 +171,7 @@ C:\Users\PINAR\Desktop\NaturalShop\NaturalShop.API\NaturalShop.API\bin\Debug\net
 C:\Users\PINAR\Desktop\NaturalShop\NaturalShop.API\NaturalShop.API\bin\Debug\net8.0\AutoMapper.dll
 C:\Users\PINAR\Desktop\NaturalShop\NaturalShop.API\NaturalShop.API\bin\Debug\net8.0\AutoMapper.Extensions.Microsoft.DependencyInjection.dll
 C:\Users\PINAR\Desktop\NaturalShop\NaturalShop.API\NaturalShop.API\obj\Debug\net8.0\NaturalShop.API.sourcelink.json
+C:\Users\PINAR\Desktop\NaturalShop\NaturalShop.API\NaturalShop.API\bin\Debug\net8.0\Microsoft.AspNetCore.Authentication.JwtBearer.dll
+C:\Users\PINAR\Desktop\NaturalShop\NaturalShop.API\NaturalShop.API\bin\Debug\net8.0\Microsoft.AspNetCore.Identity.EntityFrameworkCore.dll
+C:\Users\PINAR\Desktop\NaturalShop\NaturalShop.API\NaturalShop.API\bin\Debug\net8.0\Iyzipay.dll
+C:\Users\PINAR\Desktop\NaturalShop\NaturalShop.API\NaturalShop.API\bin\Debug\net8.0\Newtonsoft.Json.dll
