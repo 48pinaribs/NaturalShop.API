@@ -49,12 +49,22 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddCors(options =>
    {
+       var frontendUrl = builder.Configuration["Frontend:BaseUrl"] ?? "http://localhost:3000";
+       var allowedOrigins = new List<string> { frontendUrl };
+       
+       // Development ortamında localhost portlarını da ekle
+       if (builder.Environment.IsDevelopment())
+       {
+           allowedOrigins.AddRange(new[] { "http://localhost:3000", "http://localhost:3001" });
+       }
+       
        options.AddPolicy(
            "AllowFrontend", policy =>
            {
-               policy.WithOrigins("http://localhost:3000", "http://localhost:3001") // React default ports
+               policy.WithOrigins(allowedOrigins.ToArray())
                      .AllowAnyHeader()
-                     .AllowAnyMethod();
+                     .AllowAnyMethod()
+                     .AllowCredentials();
            });
    });
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
