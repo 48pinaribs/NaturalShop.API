@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using NaturalShop.API.Services;
-
+using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -126,12 +126,19 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-// Configure static files
+
+var imagesPath = Path.Combine(builder.Environment.ContentRootPath, "Images");
+
+// Azure’da klasör yoksa uygulama açılışında oluştur
+if (!Directory.Exists(imagesPath))
+{
+    Directory.CreateDirectory(imagesPath);
+}
+
 app.UseStaticFiles(new StaticFileOptions
 {
-    FileProvider = new Microsoft.Extensions.FileProviders.PhysicalFileProvider(
-        Path.Combine(Directory.GetCurrentDirectory(), "Images")),
-    RequestPath = "/images"
+    FileProvider = new PhysicalFileProvider(imagesPath),
+    RequestPath = "/Images"
 });
 
 app.UseCors("AllowFrontend");
