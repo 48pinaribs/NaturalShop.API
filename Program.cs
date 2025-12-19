@@ -8,6 +8,8 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using NaturalShop.API.Services;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.AspNetCore.StaticFiles;
+
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -51,13 +53,13 @@ builder.Services.AddCors(options =>
    {
        var frontendUrl = builder.Configuration["Frontend:BaseUrl"] ?? "http://localhost:3000";
        var allowedOrigins = new List<string> { frontendUrl };
-       
+
        // Development ortamında localhost portlarını da ekle
        if (builder.Environment.IsDevelopment())
        {
            allowedOrigins.AddRange(new[] { "http://localhost:3000", "http://localhost:3001" });
        }
-       
+
        options.AddPolicy(
            "AllowFrontend", policy =>
            {
@@ -116,13 +118,21 @@ builder.Services.AddScoped<ISmsService, SmsService>();
 
 var app = builder.Build();
 
+if (app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
+    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await SeedData.InitializeAsync(context);
+}
+
+/*
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
-
+*/
 
 app.UseHttpsRedirection();
 
@@ -141,12 +151,22 @@ app.UseStaticFiles(new StaticFileOptions
     RequestPath = "/Images"
 });
 
+// wwwroot içindeki React build + static dosyalar
+app.UseDefaultFiles();   // index.html
+app.UseStaticFiles();    // wwwroot/static vb.
+
+// SPA fallback (API ve swagger dışı her şeyi index.html'e döndür)
+app.MapFallbackToFile("index.html");
+
+
 app.UseCors("AllowFrontend");
 
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+
 
 // Initialize seed data
 using (var scope = app.Services.CreateScope())

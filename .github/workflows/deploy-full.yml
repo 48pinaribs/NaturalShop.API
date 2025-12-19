@@ -17,8 +17,6 @@ jobs:
         with:
           repository: 48pinaribs/NaturalShop.React
           path: frontend
-          # Frontend private ise:
-          # token: ${{ secrets.FRONTEND_REPO_TOKEN }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -31,12 +29,10 @@ jobs:
           npm ci
           npm run build
 
-      - name: Debug - show React build output
+      - name: Debug - ensure React index exists
         run: |
-          echo "=== frontend/build ==="
           ls -la frontend/build
-          echo "=== frontend/build/index.html ==="
-          ls -la frontend/build/index.html
+          test -f frontend/build/index.html
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -49,26 +45,27 @@ jobs:
       - name: Publish API
         run: dotnet publish "./NaturalShop.API/NaturalShop.API/NaturalShop.API.csproj" -c Release -o publish
 
-      # React build'i publish içine koy (tek URL için kritik)
-      - name: Copy React build into publish/ClientAppBuild
+      # React build -> publish/wwwroot (kritik)
+      - name: Copy React build into publish/wwwroot
         run: |
-          rm -rf "./publish/ClientAppBuild"
-          mkdir -p "./publish/ClientAppBuild"
-          cp -R "frontend/build/"* "./publish/ClientAppBuild/"
+          rm -rf "./publish/wwwroot"
+          mkdir -p "./publish/wwwroot"
+          cp -R "frontend/build/"* "./publish/wwwroot/"
 
-      - name: Debug - verify publish contains ClientAppBuild/index.html
+      - name: Debug - verify publish contains wwwroot/index.html
         run: |
-          echo "=== publish root ==="
           ls -la publish
-          echo "=== publish/ClientAppBuild ==="
-          ls -la publish/ClientAppBuild
-          echo "=== publish/ClientAppBuild/index.html ==="
-          ls -la publish/ClientAppBuild/index.html
+          ls -la publish/wwwroot
+          test -f publish/wwwroot/index.html
 
       - name: Zip publish folder
         run: |
           cd publish
           zip -r ../site.zip .
+
+      - name: Debug - verify zip contains index.html
+        run: |
+          unzip -l site.zip | grep "wwwroot/index.html"
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
