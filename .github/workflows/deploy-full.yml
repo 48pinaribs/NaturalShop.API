@@ -17,15 +17,13 @@ jobs:
         with:
           repository: 48pinaribs/NaturalShop.React
           path: frontend
-          # Frontend repo private ise aç:
+          # Frontend private ise:
           # token: ${{ secrets.FRONTEND_REPO_TOKEN }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
 
       - name: Build React
         working-directory: frontend
@@ -33,35 +31,48 @@ jobs:
           npm ci
           npm run build
 
-      # React build -> API projesinin içine (NaturalShop.API\NaturalShop.API)
-      - name: Copy React build into API project (ClientAppBuild)
+      - name: Debug - show React build output
         run: |
-          rm -rf "./NaturalShop.API/NaturalShop.API/ClientAppBuild"
-          mkdir -p "./NaturalShop.API/NaturalShop.API/ClientAppBuild"
-          cp -R "./frontend/build/"* "./NaturalShop.API/NaturalShop.API/ClientAppBuild/"
+          echo "=== frontend/build ==="
+          ls -la frontend/build
+          echo "=== frontend/build/index.html ==="
+          ls -la frontend/build/index.html
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
 
-      # Restore + Publish: doğru klasördeki csproj
       - name: Restore
         run: dotnet restore "./NaturalShop.API/NaturalShop.API/NaturalShop.API.csproj"
 
       - name: Publish API
         run: dotnet publish "./NaturalShop.API/NaturalShop.API/NaturalShop.API.csproj" -c Release -o publish
 
-      # publish içine ClientAppBuild'i de dahil et
-      - name: Copy ClientAppBuild into publish output
+      # React build'i publish içine koy (tek URL için kritik)
+      - name: Copy React build into publish/ClientAppBuild
         run: |
           rm -rf "./publish/ClientAppBuild"
           mkdir -p "./publish/ClientAppBuild"
-          cp -R "./NaturalShop.API/NaturalShop.API/ClientAppBuild/"* "./publish/ClientAppBuild/"
+          cp -R "frontend/build/"* "./publish/ClientAppBuild/"
+
+      - name: Debug - verify publish contains ClientAppBuild/index.html
+        run: |
+          echo "=== publish root ==="
+          ls -la publish
+          echo "=== publish/ClientAppBuild ==="
+          ls -la publish/ClientAppBuild
+          echo "=== publish/ClientAppBuild/index.html ==="
+          ls -la publish/ClientAppBuild/index.html
+
+      - name: Zip publish folder
+        run: |
+          cd publish
+          zip -r ../site.zip .
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
           app-name: koydensofraya
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: ./publish
+          package: ./site.zip
