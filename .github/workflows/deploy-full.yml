@@ -17,8 +17,6 @@ jobs:
         with:
           repository: 48pinaribs/NaturalShop.React
           path: frontend
-          # Frontend repo private ise aç:
-          # token: ${{ secrets.FRONTEND_REPO_TOKEN }}
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -33,11 +31,12 @@ jobs:
           npm ci
           npm run build
 
-      - name: Copy React build into API folder (ClientAppBuild)
+      # React build'i API csproj'nin yanına koy
+      - name: Copy React build into API project (ClientAppBuild)
         run: |
-          rm -rf ./ClientAppBuild
-          mkdir -p ./ClientAppBuild
-          cp -R ./frontend/build/* ./ClientAppBuild/
+          rm -rf ./NaturalShop.API/NaturalShop.API/ClientAppBuild
+          mkdir -p ./NaturalShop.API/NaturalShop.API/ClientAppBuild
+          cp -R ./frontend/build/* ./NaturalShop.API/NaturalShop.API/ClientAppBuild/
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -45,16 +44,16 @@ jobs:
           dotnet-version: "8.0.x"
 
       - name: Restore
-        run: dotnet restore
+        run: dotnet restore ./NaturalShop.API/NaturalShop.API/NaturalShop.API.csproj
 
       - name: Publish API
-        run: dotnet publish -c Release -o publish
+        run: dotnet publish ./NaturalShop.API/NaturalShop.API/NaturalShop.API.csproj -c Release -o publish
 
       - name: Copy ClientAppBuild into publish output
         run: |
           rm -rf ./publish/ClientAppBuild
           mkdir -p ./publish/ClientAppBuild
-          cp -R ./ClientAppBuild/* ./publish/ClientAppBuild/
+          cp -R ./NaturalShop.API/NaturalShop.API/ClientAppBuild/* ./publish/ClientAppBuild/
 
       - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
