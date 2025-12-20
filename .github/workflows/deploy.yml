@@ -39,22 +39,22 @@ jobs:
         run: |
           echo "Frontend root:"
           ls -la frontend | head -50
-          echo "Frontend/naturalshop.react:"
-          ls -la frontend/naturalshop.react | head -50
+          echo "Frontend/src:"
+          ls -la frontend/src | head -50
 
       - name: Install React dependencies
-        working-directory: frontend/naturalshop.react
+        working-directory: frontend
         run: npm ci
 
       - name: Build React app
-        working-directory: frontend/naturalshop.react
+        working-directory: frontend
         run: npm run build
 
       - name: Debug - Check React build output
         run: |
           echo "Checking React build/index.html..."
-          ls -la frontend/naturalshop.react/build/ | head -20
-          test -f frontend/naturalshop.react/build/index.html && echo "✓ React build/index.html exists" || echo "✗ React build/index.html NOT FOUND"
+          ls -la frontend/build/ | head -20
+          test -f frontend/build/index.html && echo "✓ React build/index.html exists" || echo "✗ React build/index.html NOT FOUND"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -72,7 +72,7 @@ jobs:
       - name: Copy React build to backend wwwroot
         run: |
           mkdir -p backend/NaturalShop.API/NaturalShop.API/publish/wwwroot
-          cp -r frontend/naturalshop.react/build/* backend/NaturalShop.API/NaturalShop.API/publish/wwwroot/
+          cp -r frontend/build/* backend/NaturalShop.API/NaturalShop.API/publish/wwwroot/
           echo "React build files copied to publish/wwwroot"
 
       - name: Debug - Verify wwwroot in publish folder
