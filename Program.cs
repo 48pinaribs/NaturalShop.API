@@ -8,17 +8,14 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using NaturalShop.API.Services;
 using Microsoft.Extensions.FileProviders;
-using Microsoft.AspNetCore.StaticFiles;
-
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
-        // Döngüsel referansları handle etmek için
-        options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+        options.JsonSerializerOptions.ReferenceHandler =
+            System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
     });
 
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
@@ -26,7 +23,7 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
     .AddDefaultTokenProviders();
 
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var jwtKey = jwtSettings["Key"] ?? throw new InvalidOperationException("JWT Key not found in configuration");// ?? işareti null check için kullanılır
+var jwtKey = jwtSettings["Key"] ?? throw new InvalidOperationException("JWT Key not found in configuration");
 var key = Encoding.UTF8.GetBytes(jwtKey);
 
 builder.Services.AddAuthentication(options =>
@@ -48,76 +45,41 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-
 builder.Services.AddCors(options =>
-   {
-       var frontendUrl = builder.Configuration["Frontend:BaseUrl"] ?? "http://localhost:3000";
-       var allowedOrigins = new List<string> { frontendUrl };
-
-       // Development ortamında localhost portlarını da ekle
-       if (builder.Environment.IsDevelopment())
-       {
-           allowedOrigins.AddRange(new[] { "http://localhost:3000", "http://localhost:3001" });
-       }
-
-       options.AddPolicy(
-           "AllowFrontend", policy =>
-           {
-               policy.WithOrigins(allowedOrigins.ToArray())
-                     .AllowAnyHeader()
-                     .AllowAnyMethod()
-                     .AllowCredentials();
-           });
-   });
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
-builder.Services.AddEndpointsApiExplorer();
-
-
-builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo { Title = "NaturalShop API", Version = "v1" });
+    var frontendUrl = builder.Configuration["Frontend:BaseUrl"] ?? "http://localhost:3000";
+    var allowedOrigins = new List<string> { frontendUrl };
 
-    c.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
-    {
-        Name = "Authorization",
-        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
-        Scheme = "Bearer",
-        BearerFormat = "JWT",
-        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
-        Description = "JWT Token'ınızı 'Bearer <token>' formatında girin"
-    });
+    if (builder.Environment.IsDevelopment())
+        allowedOrigins.AddRange(new[] { "http://localhost:3000", "http://localhost:3001" });
 
-    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    options.AddPolicy("AllowFrontend", policy =>
     {
-        {
-            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
-            {
-                Reference = new Microsoft.OpenApi.Models.OpenApiReference
-                {
-                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            Array.Empty<string>()
-        }
+        policy.WithOrigins(allowedOrigins.ToArray())
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
     });
 });
 
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 
 builder.Services.AddAutoMapper(typeof(Program));
 
-// EF Core - SQL Server
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// HttpClient Factory
 builder.Services.AddHttpClient();
-
-// SMS Service
 builder.Services.AddScoped<ISmsService, SmsService>();
 
 var app = builder.Build();
 
+// Swagger (Development ve Production)
+app.UseSwagger();
+app.UseSwaggerUI();
+
+// SeedData (sadece Development)
 if (app.Environment.IsDevelopment())
 {
     using var scope = app.Services.CreateScope();
@@ -125,39 +87,23 @@ if (app.Environment.IsDevelopment())
     await SeedData.InitializeAsync(context);
 }
 
-/*
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-*/
-
 app.UseHttpsRedirection();
 
-
-var imagesPath = Path.Combine(builder.Environment.ContentRootPath, "Images");
-
-// Azure’da klasör yoksa uygulama açılışında oluştur
+// Images klasörü oluştur
+var imagesPath = Path.Combine(app.Environment.ContentRootPath, "Images");
 if (!Directory.Exists(imagesPath))
-{
     Directory.CreateDirectory(imagesPath);
-}
 
+// /Images static files
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(imagesPath),
     RequestPath = "/Images"
 });
 
-// wwwroot içindeki React build + static dosyalar
-app.UseDefaultFiles();   // index.html
-app.UseStaticFiles();    // wwwroot/static vb.
-
-// SPA fallback (API ve swagger dışı her şeyi index.html'e döndür)
-app.MapFallbackToFile("index.html");
-
+// React: wwwroot static files
+app.UseDefaultFiles();
+app.UseStaticFiles();
 
 app.UseCors("AllowFrontend");
 
@@ -166,13 +112,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-
-
-// Initialize seed data
-using (var scope = app.Services.CreateScope())
-{
-    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await SeedData.InitializeAsync(context);
-}
+// SPA fallback (API ve Swagger hariç)
+app.MapFallbackToFile("index.html");
 
 app.Run();

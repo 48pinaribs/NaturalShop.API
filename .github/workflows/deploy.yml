@@ -1,0 +1,88 @@
+name: Deploy to Azure
+
+on:
+  push:
+    branches:
+      - yedek
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout backend repository
+      uses: actions/checkout@v4
+      with:
+        path: backend
+
+    - name: Checkout frontend repository
+      uses: actions/checkout@v4
+      with:
+        repository: 48pinaribs/NaturalShop.React
+        path: frontend
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install React dependencies
+      working-directory: frontend
+      run: npm ci
+
+    - name: Build React app
+      working-directory: frontend
+      run: npm run build
+
+    - name: Debug - Check React build output
+      run: |
+        echo "Checking React build/index.html..."
+        ls -la frontend/build/ | head -20
+        test -f frontend/build/index.html && echo "✓ React build/index.html exists" || echo "✗ React build/index.html NOT FOUND"
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Restore .NET dependencies
+      working-directory: backend/NaturalShop.API/NaturalShop.API
+      run: dotnet restore
+
+    - name: Build and publish .NET app
+      working-directory: backend/NaturalShop.API/NaturalShop.API
+      run: dotnet publish -c Release -o publish
+
+    - name: Copy React build to backend wwwroot
+      run: |
+        mkdir -p backend/NaturalShop.API/NaturalShop.API/publish/wwwroot
+        cp -r frontend/build/* backend/NaturalShop.API/NaturalShop.API/publish/wwwroot/
+        echo "React build files copied to publish/wwwroot"
+
+    - name: Debug - Verify wwwroot in publish folder
+      run: |
+        echo "Checking publish/wwwroot/index.html..."
+        ls -la backend/NaturalShop.API/NaturalShop.API/publish/wwwroot/ | head -20
+        test -f backend/NaturalShop.API/NaturalShop.API/publish/wwwroot/index.html && echo "✓ publish/wwwroot/index.html exists" || echo "✗ publish/wwwroot/index.html NOT FOUND"
+
+    - name: Create deployment package
+      working-directory: backend/NaturalShop.API/NaturalShop.API
+      run: |
+        cd publish
+        zip -r ../site.zip .
+
+    - name: Debug - Verify zip contents
+      run: |
+        echo "Checking zip file contents..."
+        unzip -l backend/NaturalShop.API/NaturalShop.API/site.zip | grep "wwwroot/index.html" && echo "✓ wwwroot/index.html found in zip" || echo "✗ wwwroot/index.html NOT FOUND in zip"
+        echo ""
+        echo "Full zip contents (first 50 lines):"
+        unzip -l backend/NaturalShop.API/NaturalShop.API/site.zip | head -50
+
+    - name: Deploy to Azure Web App
+      uses: azure/webapps-deploy@v3
+      with:
+        app-name: koydensofraya
+        publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+        package: ./backend/NaturalShop.API/NaturalShop.API/site.zip
+
