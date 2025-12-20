@@ -21,7 +21,15 @@ jobs:
           repository: 48pinaribs/NaturalShop.React
           ref: yedekk
           path: frontend
-
+      
+      - name: Find frontend package.json
+        run: |
+            echo "=== FRONTEND TOP ==="
+            ls -la frontend
+            echo ""
+            echo "=== package.json locations ==="
+            find frontend -maxdepth 4 -name package.json -print
+      
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
