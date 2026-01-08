@@ -4,3 +4,8 @@ obj/
 
 # secrets
 appsettings.Production.json
+
+# Visual Studio
+.vs/
+*.user
+*.suo
