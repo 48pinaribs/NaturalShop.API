@@ -53,13 +53,16 @@ builder.Services.AddCors(options =>
     if (builder.Environment.IsDevelopment())
         allowedOrigins.AddRange(new[] { "http://localhost:3000", "http://localhost:3001" });
 
-    options.AddPolicy("AllowFrontend", policy =>
-    {
-        policy.WithOrigins(allowedOrigins.ToArray())
-              .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials();
-    });
+	builder.Services.AddCors(options =>
+	{
+		options.AddPolicy("FrontendCors", policy =>
+			policy.WithOrigins("https://natural-shop-eta.vercel.app")
+				  .AllowAnyHeader()
+				  .AllowAnyMethod()
+		);
+	});
+
+
 });
 
 builder.Services.AddEndpointsApiExplorer();
@@ -112,7 +115,8 @@ using (var scope = app.Services.CreateScope())
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
-app.UseCors("AllowFrontend");
+app.UseCors("FrontendCors");
+
 
 app.UseAuthentication();
 app.UseAuthorization();
