@@ -56,10 +56,14 @@ builder.Services.AddCors(options =>
 	builder.Services.AddCors(options =>
 	{
 		options.AddPolicy("FrontendCors", policy =>
-			policy.WithOrigins("https://natural-shop-eta.vercel.app")
-				  .AllowAnyHeader()
-				  .AllowAnyMethod()
-		);
+	  policy.WithOrigins(
+			  "https://natural-shop-eta.vercel.app",
+			  "https://www.pinararsslan.com",
+			  "https://pinararsslan.com"
+		  )
+		  .AllowAnyHeader()
+		  .AllowAnyMethod()
+  );
 	});
 
 
