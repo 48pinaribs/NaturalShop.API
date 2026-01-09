@@ -9,18 +9,22 @@ using System.Text;
 using NaturalShop.API.Services;
 using Microsoft.Extensions.FileProviders;
 
+// ... (using satırlarınız aynı kalıyor)
+
 var builder = WebApplication.CreateBuilder(args);
 
+// 1. JSON Ayarları
 builder.Services.AddControllers()
-    .AddJsonOptions(options =>
-    {
-        options.JsonSerializerOptions.ReferenceHandler =
-            System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
-    });
+	.AddJsonOptions(options =>
+	{
+		options.JsonSerializerOptions.ReferenceHandler =
+			System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+	});
 
+// 2. Identity ve Auth Ayarları
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
-    .AddEntityFrameworkStores<AppDbContext>()
-    .AddDefaultTokenProviders();
+	.AddEntityFrameworkStores<AppDbContext>()
+	.AddDefaultTokenProviders();
 
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var jwtKey = jwtSettings["Key"] ?? throw new InvalidOperationException("JWT Key not found in configuration");
@@ -28,106 +32,94 @@ var key = Encoding.UTF8.GetBytes(jwtKey);
 
 builder.Services.AddAuthentication(options =>
 {
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+	options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+	options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
 })
 .AddJwtBearer(options =>
 {
-    options.TokenValidationParameters = new TokenValidationParameters
-    {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = true,
-        ValidateIssuerSigningKey = true,
-        ValidIssuer = jwtSettings["Issuer"],
-        ValidAudience = jwtSettings["Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(key)
-    };
+	options.TokenValidationParameters = new TokenValidationParameters
+	{
+		ValidateIssuer = true,
+		ValidateAudience = true,
+		ValidateLifetime = true,
+		ValidateIssuerSigningKey = true,
+		ValidIssuer = jwtSettings["Issuer"],
+		ValidAudience = jwtSettings["Audience"],
+		IssuerSigningKey = new SymmetricSecurityKey(key)
+	};
 });
 
+// --- CORS YAPILANDIRMASI (DÜZELTİLDİ) ---
 builder.Services.AddCors(options =>
 {
-    var frontendUrl = builder.Configuration["Frontend:BaseUrl"] ?? "http://localhost:3000";
-    var allowedOrigins = new List<string> { frontendUrl };
-
-    if (builder.Environment.IsDevelopment())
-        allowedOrigins.AddRange(new[] { "http://localhost:3000", "http://localhost:3001" });
-
-	builder.Services.AddCors(options =>
+	options.AddPolicy("FrontendCors", policy =>
 	{
-		options.AddPolicy("FrontendCors", policy =>
-	  policy.WithOrigins(
-			  "https://natural-shop-eta.vercel.app",
-			  "https://www.pinararsslan.com",
-			  "https://pinararsslan.com"
-		  )
-		  .AllowAnyHeader()
-		  .AllowAnyMethod()
-  );
+		policy.WithOrigins(
+				"https://natural-shop-eta.vercel.app",
+				"https://www.pinararsslan.com",
+				"https://pinararsslan.com",
+				"http://localhost:3000",
+				"http://localhost:3001"
+			)
+			.AllowAnyHeader()
+			.AllowAnyMethod()
+			.AllowCredentials(); // Auth kullanıyorsanız bu önemlidir
 	});
-
-
 });
 
+// Diğer servisler
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-
 builder.Services.AddAutoMapper(typeof(Program));
-
 builder.Services.AddDbContext<AppDbContext>(options =>
 	options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
-
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<ISmsService, SmsService>();
 
 var app = builder.Build();
 
-// Swagger (Development ve Production)
+// --- MIDDLEWARE SIRALAMASI ---
+
 app.UseSwagger();
 app.UseSwaggerUI();
 
-// SeedData (sadece Development)
 if (app.Environment.IsDevelopment())
 {
-    using var scope = app.Services.CreateScope();
-    var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await SeedData.InitializeAsync(context);
+	using var scope = app.Services.CreateScope();
+	var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+	await SeedData.InitializeAsync(context);
 }
 
-app.UseHttpsRedirection();
-
-// Images klasörü oluştur
+// Görsel yönetimi
 var imagesPath = Path.Combine(app.Environment.ContentRootPath, "Images");
-if (!Directory.Exists(imagesPath))
-    Directory.CreateDirectory(imagesPath);
+if (!Directory.Exists(imagesPath)) Directory.CreateDirectory(imagesPath);
 
-// /Images static files
 app.UseStaticFiles(new StaticFileOptions
 {
-    FileProvider = new PhysicalFileProvider(imagesPath),
-    RequestPath = "/Images"
+	FileProvider = new PhysicalFileProvider(imagesPath),
+	RequestPath = "/Images"
 });
 
-
+// Database Migration
 using (var scope = app.Services.CreateScope())
 {
 	var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 	db.Database.Migrate();
 }
 
-// React: wwwroot static files
+app.UseHttpsRedirection();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
 app.UseRouting();
+
+// ÖNEMLİ SIRALAMA: Cors -> Authentication -> Authorization
 app.UseCors("FrontendCors");
-app.UseAuthorization();
 
 app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
-
-// SPA fallback (API ve Swagger hariç)
 app.MapFallbackToFile("index.html");
 
 app.Run();
