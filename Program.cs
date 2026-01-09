@@ -91,13 +91,13 @@ if (app.Environment.IsDevelopment())
 }
 
 // Görsel yönetimi
-var imagesPath = Path.Combine(app.Environment.ContentRootPath, "Images");
+var imagesPath = Path.Combine(app.Environment.ContentRootPath, "images");
 if (!Directory.Exists(imagesPath)) Directory.CreateDirectory(imagesPath);
 
 app.UseStaticFiles(new StaticFileOptions
 {
 	FileProvider = new PhysicalFileProvider(imagesPath),
-	RequestPath = "/Images"
+	RequestPath = "/images"
 });
 
 // Database Migration
