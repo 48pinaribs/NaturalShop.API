@@ -119,11 +119,11 @@ using (var scope = app.Services.CreateScope())
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
+app.UseRouting();
 app.UseCors("FrontendCors");
-
+app.UseAuthorization();
 
 app.UseAuthentication();
-app.UseAuthorization();
 
 app.MapControllers();
 
