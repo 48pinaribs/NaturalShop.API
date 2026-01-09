@@ -107,9 +107,10 @@ using (var scope = app.Services.CreateScope())
 	db.Database.Migrate();
 }
 
-app.UseHttpsRedirection();
+
 app.UseDefaultFiles();
 app.UseStaticFiles();
+app.UseHttpsRedirection();
 
 app.UseRouting();
 
