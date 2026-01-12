@@ -19,6 +19,9 @@ builder.Services.AddControllers()
 	{
 		options.JsonSerializerOptions.ReferenceHandler =
 			System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+		// JavaScript/React uyumluluğu için camelCase kullan
+		options.JsonSerializerOptions.PropertyNamingPolicy = 
+			System.Text.Json.JsonNamingPolicy.CamelCase;
 	});
 
 // 2. Identity ve Auth Ayarları
