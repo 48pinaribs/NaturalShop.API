@@ -78,6 +78,19 @@ builder.Services.AddScoped<ISmsService, SmsService>();
 
 var app = builder.Build();
 
+// Veritabanını tohumla (Seed)
+Console.WriteLine("🌱 DbInitializer başlatılıyor...");
+try
+{
+	DbInitializer.Seed(app);
+	Console.WriteLine("✅ DbInitializer başarıyla tamamlandı.");
+}
+catch (Exception ex)
+{
+	Console.WriteLine($"❌ DbInitializer hatası: {ex.Message}");
+	Console.WriteLine($"❌ Stack Trace: {ex.StackTrace}");
+}
+
 // --- MIDDLEWARE SIRALAMASI ---
 
 app.UseSwagger();
