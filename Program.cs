@@ -81,35 +81,31 @@ builder.Services.AddScoped<ISmsService, SmsService>();
 
 var app = builder.Build();
 
-// --- YENİ VE TEMİZ VERİTABANI YÖNETİMİ ---
-using (var scope = app.Services.CreateScope())
+// --- 1. SWAGGER & STATIC FILES (Hemen hazır olmalı) ---
+app.UseSwagger();
+app.UseSwaggerUI();
+
+// --- 2. VERİTABANI İŞLEMLERİNİ ASENKRON BAŞLAT (BLOKLAMADAN) ---
+// Task.Run kullanarak bu ağır işlemi arka plana atıyoruz, böylece app.Run() hemen çalışabilir.
+_ = Task.Run(async () =>
 {
+	using var scope = app.Services.CreateScope();
 	var services = scope.ServiceProvider;
 	try
 	{
 		var context = services.GetRequiredService<AppDbContext>();
-		Console.WriteLine("🚀 Veritabanı işlemleri başlatılıyor (Migration + Seed)...");
+		Console.WriteLine("🚀 Arka planda veritabanı işlemleri başladı...");
 
-		// Önce tabloları oluştur/güncelle
 		await context.Database.MigrateAsync();
-
-		// Sonra verileri ekle (SeedData kullanıyoruz)
 		await SeedData.InitializeAsync(context);
 
-		Console.WriteLine("✅ Veritabanı tamamen hazır!");
+		Console.WriteLine("✅ Veritabanı arka planda hazırlandı!");
 	}
 	catch (Exception ex)
 	{
-		Console.WriteLine($"❌ Veritabanı aşamasında hata: {ex.Message}");
+		Console.WriteLine($"❌ Veritabanı hatası: {ex.Message}");
 	}
-}
-
-
-
-// --- MIDDLEWARE SIRALAMASI ---
-
-app.UseSwagger();
-app.UseSwaggerUI();
+});
 
 // Görsel yönetimi
 var imagesPath = Path.Combine(app.Environment.ContentRootPath, "images");
