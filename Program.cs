@@ -69,12 +69,28 @@ builder.Services.AddScoped<ISmsService, SmsService>();
 
 var app = builder.Build();
 
-// --- VERİTABANI İŞLEMLERİNİ TEST İÇİN ŞİMDİLİK KAPATIYORUZ ---
-/* _ = Task.Run(async () => {
-    // Veritabanı kodları buradaydı...
-});
-*/
+_ = Task.Run(async () =>
+{
+	using var scope = app.Services.CreateScope();
+	var services = scope.ServiceProvider;
+	try
+	{
+		var context = services.GetRequiredService<AppDbContext>();
+		Console.WriteLine("📡 Veritabanı tabloları kontrol ediliyor...");
 
+		// Tabloları oluşturur/günceller
+		await context.Database.MigrateAsync();
+
+		// Seed dataları ekler
+		await SeedData.InitializeAsync(context);
+
+		Console.WriteLine("✅ VERİTABANI TAMAMEN HAZIR!");
+	}
+	catch (Exception ex)
+	{
+		Console.WriteLine($"❌ VERİTABANI HATASI: {ex.Message}");
+	}
+});
 app.UseSwagger();
 app.UseSwaggerUI();
 
