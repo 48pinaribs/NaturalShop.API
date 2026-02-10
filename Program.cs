@@ -94,7 +94,7 @@ using (var scope = app.Services.CreateScope())
 		await context.Database.MigrateAsync();
 
 		// Sonra verileri ekle (SeedData kullanıyoruz)
-		await SeedData.InitializeAsync(context);
+		//await SeedData.InitializeAsync(context);
 
 		Console.WriteLine("✅ Veritabanı tamamen hazır!");
 	}
