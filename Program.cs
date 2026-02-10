@@ -52,10 +52,9 @@ builder.Services.AddCors(options =>
 {
 	options.AddPolicy("FrontendCors", policy =>
 	{
-		policy.AllowAnyOrigin()
-			  .AllowAnyHeader()
-			  .AllowAnyMethod();
-		// Not: AllowAnyOrigin varken AllowCredentials kullanılmaz.
+		policy.WithOrigins("https://www.pinararsslan.com")
+		.AllowAnyHeader()
+		.AllowAnyMethod();
 	});
 });
 
