@@ -9,28 +9,23 @@ using System.Text;
 using NaturalShop.API.Services;
 using Microsoft.Extensions.FileProviders;
 
-// ... (using satırlarınız aynı kalıyor)
-
 var builder = WebApplication.CreateBuilder(args);
 
 // 1. JSON Ayarları
 builder.Services.AddControllers()
 	.AddJsonOptions(options =>
 	{
-		options.JsonSerializerOptions.ReferenceHandler =
-			System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
-		// JavaScript/React uyumluluğu için camelCase kullan
-		options.JsonSerializerOptions.PropertyNamingPolicy = 
-			System.Text.Json.JsonNamingPolicy.CamelCase;
+		options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+		options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
 	});
 
-// 2. Identity ve Auth Ayarları
+// 2. Identity ve Auth
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
 	.AddEntityFrameworkStores<AppDbContext>()
 	.AddDefaultTokenProviders();
 
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var jwtKey = jwtSettings["Key"] ?? throw new InvalidOperationException("JWT Key not found in configuration");
+var jwtKey = jwtSettings["Key"] ?? "VerySecretKey1234567890123456"; // Geçici fallback
 var key = Encoding.UTF8.GetBytes(jwtKey);
 
 builder.Services.AddAuthentication(options =>
@@ -52,25 +47,18 @@ builder.Services.AddAuthentication(options =>
 	};
 });
 
-// --- CORS YAPILANDIRMASI (DÜZELTİLDİ) ---
+// --- 3. CORS (EN ESNEK HALİ - TEST İÇİN) ---
 builder.Services.AddCors(options =>
 {
 	options.AddPolicy("FrontendCors", policy =>
 	{
-		policy.WithOrigins(
-				"https://natural-shop-eta.vercel.app",
-				"https://www.pinararsslan.com",
-				"https://pinararsslan.com",
-				"http://localhost:3000",
-				"http://localhost:3001"
-			)
-			.AllowAnyHeader()
-			.AllowAnyMethod()
-			.AllowCredentials(); // Auth kullanıyorsanız bu önemlidir
+		policy.AllowAnyOrigin()
+			  .AllowAnyHeader()
+			  .AllowAnyMethod();
+		// Not: AllowAnyOrigin varken AllowCredentials kullanılmaz.
 	});
 });
 
-// Diğer servisler
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddAutoMapper(typeof(Program));
@@ -81,33 +69,15 @@ builder.Services.AddScoped<ISmsService, SmsService>();
 
 var app = builder.Build();
 
-// --- 1. SWAGGER & STATIC FILES (Hemen hazır olmalı) ---
+// --- VERİTABANI İŞLEMLERİNİ TEST İÇİN ŞİMDİLİK KAPATIYORUZ ---
+/* _ = Task.Run(async () => {
+    // Veritabanı kodları buradaydı...
+});
+*/
+
 app.UseSwagger();
 app.UseSwaggerUI();
 
-// --- 2. VERİTABANI İŞLEMLERİNİ ASENKRON BAŞLAT (BLOKLAMADAN) ---
-// Task.Run kullanarak bu ağır işlemi arka plana atıyoruz, böylece app.Run() hemen çalışabilir.
-_ = Task.Run(async () =>
-{
-	using var scope = app.Services.CreateScope();
-	var services = scope.ServiceProvider;
-	try
-	{
-		var context = services.GetRequiredService<AppDbContext>();
-		Console.WriteLine("🚀 Arka planda veritabanı işlemleri başladı...");
-
-		await context.Database.MigrateAsync();
-		await SeedData.InitializeAsync(context);
-
-		Console.WriteLine("✅ Veritabanı arka planda hazırlandı!");
-	}
-	catch (Exception ex)
-	{
-		Console.WriteLine($"❌ Veritabanı hatası: {ex.Message}");
-	}
-});
-
-// Görsel yönetimi
 var imagesPath = Path.Combine(app.Environment.ContentRootPath, "images");
 if (!Directory.Exists(imagesPath)) Directory.CreateDirectory(imagesPath);
 
@@ -117,15 +87,14 @@ app.UseStaticFiles(new StaticFileOptions
 	RequestPath = "/images"
 });
 
-
 app.UseDefaultFiles();
 app.UseStaticFiles();
-app.UseHttpsRedirection();
+
+// Render/Docker ortamında bazen yönlendirme sorun çıkarabilir, şimdilik kapatabilirsin
+// app.UseHttpsRedirection(); 
 
 app.UseRouting();
-
-// ÖNEMLİ SIRALAMA: Cors -> Authentication -> Authorization
-app.UseCors("FrontendCors");
+app.UseCors("FrontendCors"); // Sıralama kritik!
 
 app.UseAuthentication();
 app.UseAuthorization();
