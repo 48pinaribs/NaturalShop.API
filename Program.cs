@@ -81,30 +81,35 @@ builder.Services.AddScoped<ISmsService, SmsService>();
 
 var app = builder.Build();
 
-// Veritabanını tohumla (Seed)
-Console.WriteLine("🌱 DbInitializer başlatılıyor...");
-try
+// --- YENİ VE TEMİZ VERİTABANI YÖNETİMİ ---
+using (var scope = app.Services.CreateScope())
 {
-	DbInitializer.Seed(app);
-	Console.WriteLine("✅ DbInitializer başarıyla tamamlandı.");
+	var services = scope.ServiceProvider;
+	try
+	{
+		var context = services.GetRequiredService<AppDbContext>();
+		Console.WriteLine("🚀 Veritabanı işlemleri başlatılıyor (Migration + Seed)...");
+
+		// Önce tabloları oluştur/güncelle
+		await context.Database.MigrateAsync();
+
+		// Sonra verileri ekle (SeedData kullanıyoruz)
+		await SeedData.InitializeAsync(context);
+
+		Console.WriteLine("✅ Veritabanı tamamen hazır!");
+	}
+	catch (Exception ex)
+	{
+		Console.WriteLine($"❌ Veritabanı aşamasında hata: {ex.Message}");
+	}
 }
-catch (Exception ex)
-{
-	Console.WriteLine($"❌ DbInitializer hatası: {ex.Message}");
-	Console.WriteLine($"❌ Stack Trace: {ex.StackTrace}");
-}
+
+
 
 // --- MIDDLEWARE SIRALAMASI ---
 
 app.UseSwagger();
 app.UseSwaggerUI();
-
-if (app.Environment.IsDevelopment())
-{
-	using var scope = app.Services.CreateScope();
-	var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-	await SeedData.InitializeAsync(context);
-}
 
 // Görsel yönetimi
 var imagesPath = Path.Combine(app.Environment.ContentRootPath, "images");
@@ -115,13 +120,6 @@ app.UseStaticFiles(new StaticFileOptions
 	FileProvider = new PhysicalFileProvider(imagesPath),
 	RequestPath = "/images"
 });
-
-// Database Migration
-using (var scope = app.Services.CreateScope())
-{
-	var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-	db.Database.Migrate();
-}
 
 
 app.UseDefaultFiles();
@@ -137,6 +135,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapFallbackToFile("index.html");
+app.MapGet("/", () => Results.Redirect("/swagger"));
 
 app.Run();
