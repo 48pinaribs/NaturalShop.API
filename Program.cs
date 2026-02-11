@@ -24,6 +24,10 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
 	.AddEntityFrameworkStores<AppDbContext>()
 	.AddDefaultTokenProviders();
 
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+builder.Services.AddDbContext<AppDbContext>(options =>
+	options.UseNpgsql(connectionString));
+
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
 var jwtKey = jwtSettings["Key"] ?? "VerySecretKey1234567890123456"; // Geçici fallback
 var key = Encoding.UTF8.GetBytes(jwtKey);
@@ -46,18 +50,14 @@ builder.Services.AddAuthentication(options =>
 		IssuerSigningKey = new SymmetricSecurityKey(key)
 	};
 });
-
-// --- 3. CORS (EN ESNEK HALİ - TEST İÇİN) ---
-builder.Services.AddCors(options =>
-{
-	options.AddPolicy("FrontendCors", policy =>
-	{
-		policy.WithOrigins("https://www.pinararsslan.com")
-		.AllowAnyHeader()
-		.AllowAnyMethod();
+// --- CORS DÜZELTME ---
+builder.Services.AddCors(options => {
+	options.AddPolicy("AllowLocal", policy => {
+		policy.WithOrigins("http://localhost:3000", "http://localhost:5173") // 3000 veya 5173 hangisini kullanıyorsan
+			  .AllowAnyHeader()
+			  .AllowAnyMethod();
 	});
 });
-
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddAutoMapper(typeof(Program));
@@ -75,21 +75,31 @@ _ = Task.Run(async () =>
 	try
 	{
 		var context = services.GetRequiredService<AppDbContext>();
-		Console.WriteLine("📡 Veritabanı tabloları kontrol ediliyor...");
 
-		// Tabloları oluşturur/günceller
-		await context.Database.MigrateAsync();
+		// 1. ADIM: Bağlantı hazır mı?
+		Console.WriteLine("📡 Veritabanı fiziksel bağlantısı kontrol ediliyor...");
+		if (await context.Database.CanConnectAsync())
+		{
+			Console.WriteLine("✅ Fiziksel bağlantı OK.");
 
-		// Seed dataları ekler
-		await SeedData.InitializeAsync(context);
+			// 2. ADIM: Migration'ları zorla
+			Console.WriteLine("🏗️ Migrationlar uygulanıyor (Tablolar oluşturuluyor)...");
+			await context.Database.MigrateAsync();
+			Console.WriteLine("🚀 Tablolar başarıyla oluşturuldu/güncellendi.");
 
-		Console.WriteLine("✅ VERİTABANI TAMAMEN HAZIR!");
+			// 3. ADIM: Seed verilerini bas
+			await SeedData.InitializeAsync(context);
+			Console.WriteLine("💎 Seed verileri başarıyla yüklendi.");
+		}
 	}
 	catch (Exception ex)
 	{
-		Console.WriteLine($"❌ VERİTABANI HATASI: {ex.Message}");
+		Console.WriteLine($"❌ KRİTİK VERİTABANI HATASI: {ex.Message}");
+		if (ex.InnerException != null)
+			Console.WriteLine($"🔍 DETAY: {ex.InnerException.Message}");
 	}
 });
+
 app.UseSwagger();
 app.UseSwaggerUI();
 
@@ -109,7 +119,7 @@ app.UseStaticFiles();
 // app.UseHttpsRedirection(); 
 
 app.UseRouting();
-app.UseCors("FrontendCors"); // Sıralama kritik!
+app.UseCors("AllowLocal");
 
 app.UseAuthentication();
 app.UseAuthorization();
