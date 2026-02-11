@@ -53,7 +53,11 @@ builder.Services.AddAuthentication(options =>
 // --- CORS DÜZELTME ---
 builder.Services.AddCors(options => {
 	options.AddPolicy("AllowLocal", policy => {
-		policy.WithOrigins("http://localhost:3000", "http://localhost:5173") // 3000 veya 5173 hangisini kullanıyorsan
+		policy.WithOrigins(
+			    "http://localhost:3000",
+			    "https://natural-shop-eta.vercel.app",
+				"https://www.pinararsslan.com",
+				"https://pinararsslan.com",)
 			  .AllowAnyHeader()
 			  .AllowAnyMethod();
 	});
@@ -126,5 +130,20 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapGet("/", () => Results.Redirect("/swagger"));
+
+using (var scope = app.Services.CreateScope())
+{
+	var services = scope.ServiceProvider;
+	try
+	{
+		var context = services.GetRequiredService<AppDbContext>();
+		context.Database.Migrate(); // Bu satır eksik tabloları oluşturur
+	}
+	catch (Exception ex)
+	{
+		var logger = services.GetRequiredService<ILogger<Program>>();
+		logger.LogError(ex, "Migration uygulanırken hata oluştu.");
+	}
+}
 
 app.Run();
