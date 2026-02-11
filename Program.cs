@@ -8,28 +8,26 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using NaturalShop.API.Services;
 using Microsoft.Extensions.FileProviders;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. JSON Ayarları
-builder.Services.AddControllers()
-	.AddJsonOptions(options =>
-	{
-		options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
-		options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
-	});
+// --- 1. VERİTABANI VE CONNECTION STRING ---
+// Render üzerindeki DefaultConnection'ı alır.
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 
-// 2. Identity ve Auth
+builder.Services.AddDbContext<AppDbContext>(options =>
+	options.UseNpgsql(connectionString, npgsqlOptions => {
+		npgsqlOptions.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null); // Bağlantı koparsa 5 kez dene
+	}));
+
+// --- 2. IDENTITY VE AUTHENTICATION ---
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>()
 	.AddEntityFrameworkStores<AppDbContext>()
 	.AddDefaultTokenProviders();
 
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-builder.Services.AddDbContext<AppDbContext>(options =>
-	options.UseNpgsql(connectionString));
-
 var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-var jwtKey = jwtSettings["Key"] ?? "VerySecretKey1234567890123456"; // Geçici fallback
+var jwtKey = jwtSettings["Key"] ?? "SeniorSecretKey1234567890123456";
 var key = Encoding.UTF8.GetBytes(jwtKey);
 
 builder.Services.AddAuthentication(options =>
@@ -50,64 +48,69 @@ builder.Services.AddAuthentication(options =>
 		IssuerSigningKey = new SymmetricSecurityKey(key)
 	};
 });
-// --- CORS DÜZELTME ---
+
+// --- 3. CORS AYARLARI ---
 builder.Services.AddCors(options => {
 	options.AddPolicy("AllowLocal", policy => {
 		policy.WithOrigins(
-			    "http://localhost:3000",
-			    "https://natural-shop-eta.vercel.app",
+				"http://localhost:3000",
+				"https://natural-shop-eta.vercel.app",
 				"https://www.pinararsslan.com",
 				"https://pinararsslan.com"
-				)
-			  .AllowAnyHeader()
-			  .AllowAnyMethod();
+			)
+			.AllowAnyHeader()
+			.AllowAnyMethod();
 	});
 });
+
+// --- 4. SERVİS KAYITLARI ---
+builder.Services.AddControllers()
+	.AddJsonOptions(options =>
+	{
+		options.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+		options.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+	});
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddAutoMapper(typeof(Program));
-builder.Services.AddDbContext<AppDbContext>(options =>
-	options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<ISmsService, SmsService>();
 
 var app = builder.Build();
 
+// --- 5. ARKA PLAN MIGRATION SİSTEMİ (BLOCKING OLMAYAN) ---
+// Uygulama hemen ayağa kalkar, Render "Timed Out" vermez.
 _ = Task.Run(async () =>
 {
 	using var scope = app.Services.CreateScope();
-	var services = scope.ServiceProvider;
 	try
 	{
-		var context = services.GetRequiredService<AppDbContext>();
+		var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+		Console.WriteLine("📡 [DB] Bağlantı kontrol ediliyor...");
 
-		// 1. ADIM: Bağlantı hazır mı?
-		Console.WriteLine("📡 Veritabanı fiziksel bağlantısı kontrol ediliyor...");
-		if (await context.Database.CanConnectAsync())
-		{
-			Console.WriteLine("✅ Fiziksel bağlantı OK.");
+		context.Database.SetCommandTimeout(120); // Migration için süreyi uzat
+		await context.Database.MigrateAsync();
 
-			// 2. ADIM: Migration'ları zorla
-			Console.WriteLine("🏗️ Migrationlar uygulanıyor (Tablolar oluşturuluyor)...");
-			await context.Database.MigrateAsync();
-			Console.WriteLine("🚀 Tablolar başarıyla oluşturuldu/güncellendi.");
-
-			// 3. ADIM: Seed verilerini bas
-			await SeedData.InitializeAsync(context);
-			Console.WriteLine("💎 Seed verileri başarıyla yüklendi.");
-		}
+		Console.WriteLine("🚀 [DB] Tablolar başarıyla oluşturuldu.");
+		await SeedData.InitializeAsync(context);
+		Console.WriteLine("💎 [DB] Seed verileri hazır.");
 	}
 	catch (Exception ex)
 	{
-		Console.WriteLine($"❌ KRİTİK VERİTABANI HATASI: {ex.Message}");
-		if (ex.InnerException != null)
-			Console.WriteLine($"🔍 DETAY: {ex.InnerException.Message}");
+		Console.WriteLine($"⚠️ [DB] Başlangıç hatası (API yine de çalışıyor): {ex.Message}");
 	}
 });
 
+// --- 6. MIDDLEWARE PIPELINE ---
+// Geliştirme ortamında olmasak bile Swagger'ı Render'da görebilmek için if dışına aldık
 app.UseSwagger();
-app.UseSwaggerUI();
+app.UseSwaggerUI(c => {
+	c.SwaggerEndpoint("/swagger/v1/swagger.json", "NaturalShop API V1");
+	c.RoutePrefix = "swagger";
+});
 
+// Resim dosyaları için fiziksel yol ayarı
 var imagesPath = Path.Combine(app.Environment.ContentRootPath, "images");
 if (!Directory.Exists(imagesPath)) Directory.CreateDirectory(imagesPath);
 
@@ -120,9 +123,6 @@ app.UseStaticFiles(new StaticFileOptions
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
-// Render/Docker ortamında bazen yönlendirme sorun çıkarabilir, şimdilik kapatabilirsin
-// app.UseHttpsRedirection(); 
-
 app.UseRouting();
 app.UseCors("AllowLocal");
 
@@ -130,21 +130,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapGet("/", () => Results.Redirect("/swagger"));
 
-using (var scope = app.Services.CreateScope())
-{
-	var services = scope.ServiceProvider;
-	try
-	{
-		var context = services.GetRequiredService<AppDbContext>();
-		context.Database.Migrate(); // Bu satır eksik tabloları oluşturur
-	}
-	catch (Exception ex)
-	{
-		var logger = services.GetRequiredService<ILogger<Program>>();
-		logger.LogError(ex, "Migration uygulanırken hata oluştu.");
-	}
-}
+// Ana dizine geleni Swagger'a yönlendir
+app.MapGet("/", () => Results.Redirect("/swagger"));
 
 app.Run();
