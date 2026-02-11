@@ -57,7 +57,8 @@ builder.Services.AddCors(options => {
 			    "http://localhost:3000",
 			    "https://natural-shop-eta.vercel.app",
 				"https://www.pinararsslan.com",
-				"https://pinararsslan.com",)
+				"https://pinararsslan.com"
+				)
 			  .AllowAnyHeader()
 			  .AllowAnyMethod();
 	});
