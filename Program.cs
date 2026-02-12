@@ -81,27 +81,36 @@ var app = builder.Build();
 
 // --- 5. ARKA PLAN MIGRATION SİSTEMİ (BLOCKING OLMAYAN) ---
 // Uygulama hemen ayağa kalkar, Render "Timed Out" vermez.
-_ = Task.Run(async () =>
+using (var scope = app.Services.CreateScope())
 {
-	using var scope = app.Services.CreateScope();
+	var services = scope.ServiceProvider;
 	try
 	{
-		var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+		var context = services.GetRequiredService<AppDbContext>();
 		Console.WriteLine("📡 [DB] Bağlantı kontrol ediliyor...");
 
-		context.Database.SetCommandTimeout(120); // Migration için süreyi uzat
-		await context.Database.MigrateAsync();
+		// Timeout süresini ayarla
+		context.Database.SetCommandTimeout(120);
 
-		Console.WriteLine("🚀 [DB] Tablolar başarıyla oluşturuldu.");
-	    DbInitializer.Seed(app);
-		Console.WriteLine("💎 [DB] DbInıtıalizer verileri hazır.");
+		// ÖNEMLİ: Daha önce EnsureCreated kullandıysan MigrateAsync hata verebilir.
+		// Şimdilik en garantisi şudur:
+		await context.Database.EnsureCreatedAsync();
+
+		Console.WriteLine("🚀 [DB] Tablolar kontrol edildi/oluşturuldu.");
+
+		// DbInitializer'ı burada çağırıyoruz
+		DbInitializer.Seed(app);
+
+		Console.WriteLine("💎 [DB] DbInitializer işlemi tamamlandı.");
 	}
 	catch (Exception ex)
 	{
-		Console.WriteLine($"⚠️ [DB] Başlangıç hatası (API yine de çalışıyor): {ex.Message}");
+		Console.WriteLine($"⚠️ [DB] Kritik Başlangıç Hatası: {ex.Message}");
+		// İç hatayı da yazdıralım ki asıl sebebi görelim
+		if (ex.InnerException != null)
+			Console.WriteLine($"🔍 [DB] Detay: {ex.InnerException.Message}");
 	}
-});
-
+}
 // --- 6. MIDDLEWARE PIPELINE ---
 // Geliştirme ortamında olmasak bile Swagger'ı Render'da görebilmek için if dışına aldık
 app.UseSwagger();
