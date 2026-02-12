@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using System.Text.Json;
 using NaturalShop.API.Services;
 using Microsoft.Extensions.FileProviders;
 using System.Text.Json.Serialization;
@@ -63,12 +64,11 @@ builder.Services.AddCors(options => {
 	});
 });
 
-// --- 4. SERVİS KAYITLARI ---
+// ✅ Doğru
 builder.Services.AddControllers()
-	.AddJsonOptions(options =>
-	{
-		options.ReferenceHandler = ReferenceHandler.IgnoreCycles;
-		options.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+	.AddJsonOptions(options => {
+		options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+		options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
 	});
 
 builder.Services.AddEndpointsApiExplorer();
