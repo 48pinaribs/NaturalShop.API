@@ -93,8 +93,8 @@ _ = Task.Run(async () =>
 		await context.Database.MigrateAsync();
 
 		Console.WriteLine("🚀 [DB] Tablolar başarıyla oluşturuldu.");
-		await SeedData.InitializeAsync(context);
-		Console.WriteLine("💎 [DB] Seed verileri hazır.");
+	    DbInitializer.Seed(app);
+		Console.WriteLine("💎 [DB] DbInıtıalizer verileri hazır.");
 	}
 	catch (Exception ex)
 	{
