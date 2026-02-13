@@ -81,7 +81,7 @@ var app = builder.Build();
 
 // --- 5. ARKA PLAN MIGRATION SİSTEMİ (BLOCKING OLMAYAN) ---
 // Uygulama hemen ayağa kalkar, Render "Timed Out" vermez.
-using (var scope = app.Services.CreateScope())
+/* using (var scope = app.Services.CreateScope())
 {
 	var services = scope.ServiceProvider;
 	try
@@ -110,7 +110,9 @@ using (var scope = app.Services.CreateScope())
 		if (ex.InnerException != null)
 			Console.WriteLine($"🔍 [DB] Detay: {ex.InnerException.Message}");
 	}
-}
+}*/
+
+
 // --- 6. MIDDLEWARE PIPELINE ---
 // Geliştirme ortamında olmasak bile Swagger'ı Render'da görebilmek için if dışına aldık
 app.UseSwagger();
