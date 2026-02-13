@@ -16,19 +16,18 @@ namespace NaturalShop.API.Data
 		public DbSet<Product> Products { get; set; }
 		public DbSet<VerificationCode> VerificationCodes { get; set; }
 
-		// --- BU KISMI EKLEDÝM: TABLO ÝSÝMLERÝNÝ SABÝTLÝYORUZ ---
 		protected override void OnModelCreating(ModelBuilder modelBuilder)
 		{
-			// Identity (Giriþ/Kayýt) tablolarý için bu satýrý asla silme
 			base.OnModelCreating(modelBuilder);
 
-			// Eðer Supabase'de tablo adýn "Product" (tekil) ise bu satýr 32 saniyelik hatayý çözer
-			modelBuilder.Entity<Product>().ToTable("Product");
+			// Supabase/PostgreSQL için en saðlýklý eþleþtirme:
+			// Tablo adýný tam olarak senin söylediðin gibi "Products" yapýyoruz.
+			// "public" þemasýný eklemek, baðlantý hýzýný ve doðruluðunu artýrýr.
+			modelBuilder.Entity<Product>().ToTable("Products", "public");
 
-			// Diðer tablolarýný da garantiye alalým
-			modelBuilder.Entity<Order>().ToTable("Order");
-			modelBuilder.Entity<OrderItem>().ToTable("OrderItem");
-			modelBuilder.Entity<VerificationCode>().ToTable("VerificationCode");
+			modelBuilder.Entity<Order>().ToTable("Orders", "public");
+			modelBuilder.Entity<OrderItem>().ToTable("OrderItems", "public");
+			modelBuilder.Entity<VerificationCode>().ToTable("VerificationCodes", "public");
 		}
 	}
 }
