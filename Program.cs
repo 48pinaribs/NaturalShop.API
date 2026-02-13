@@ -19,7 +19,7 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 
 builder.Services.AddDbContext<AppDbContext>(options =>
 	options.UseNpgsql(connectionString, npgsqlOptions => {
-		npgsqlOptions.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null); // Bağlantı koparsa 5 kez dene
+		npgsqlOptions.EnableRetryOnFailure(2, TimeSpan.FromSeconds(5), null); // Bağlantı koparsa 5 kez dene
 	}));
 
 // --- 2. IDENTITY VE AUTHENTICATION ---
