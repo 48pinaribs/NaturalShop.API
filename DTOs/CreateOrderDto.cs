@@ -6,6 +6,16 @@ namespace NaturalShop.API.DTOs
     {
         [JsonPropertyName("items")]
         public List<OrderItemDto> Items { get; set; } = new List<OrderItemDto>();
+
+        // Checkout formundan gelen teslimat bilgileri (opsiyonel - yoksa kullanıcı profilinden alınır)
+        [JsonPropertyName("recipientName")]
+        public string? RecipientName { get; set; }
+
+        [JsonPropertyName("recipientPhone")]
+        public string? RecipientPhone { get; set; }
+
+        [JsonPropertyName("shippingAddress")]
+        public string? ShippingAddress { get; set; }
     }
 
     public class OrderItemDto

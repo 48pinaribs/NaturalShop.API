@@ -172,7 +172,10 @@ namespace NaturalShop.API.Controllers
                             Status = "Pending", // Ödeme bekleniyor durumu
                             CreatedAt = DateTime.UtcNow,
                             TotalAmount = totalAmount,
-                            Items = orderItems
+                            Items = orderItems,
+                            RecipientName = dto.RecipientName,
+                            RecipientPhone = dto.RecipientPhone,
+                            ShippingAddress = dto.ShippingAddress,
                         };
 
                         _db.Orders.Add(order);
@@ -228,8 +231,9 @@ namespace NaturalShop.API.Controllers
                 _logger.LogInformation("StartPayment: Iyzico Checkout Form Request oluşturuldu - OrderId: {OrderId}, CallbackUrl: {CallbackUrl}, Price: {Price}", 
                     order.Id, callbackUrl, totalAmount);
 
-                // 10. Buyer bilgileri (kullanıcı bilgilerinden alınır)
-                var buyerNameParts = (user.FullName ?? "Test User").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                // 10. Buyer bilgileri (önce checkout formundan, yoksa kullanıcı profilinden alınır)
+                var recipientName = !string.IsNullOrWhiteSpace(dto.RecipientName) ? dto.RecipientName : user.FullName;
+                var buyerNameParts = (recipientName ?? "Test User").Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 var buyerName = buyerNameParts.Length > 0 ? buyerNameParts[0] : "Test";
                 var buyerSurname = buyerNameParts.Length > 1 ? string.Join(" ", buyerNameParts.Skip(1)) : "User";
                 
@@ -251,15 +255,18 @@ namespace NaturalShop.API.Controllers
                         user.Email, buyerEmail);
                 }
                 
+                var recipientAddress = !string.IsNullOrWhiteSpace(dto.ShippingAddress) ? dto.ShippingAddress : user.Address;
+                var recipientPhone = !string.IsNullOrWhiteSpace(dto.RecipientPhone) ? dto.RecipientPhone : user.PhoneNumber;
+
                 var buyer = new Buyer
                 {
                     Id = userId,
                     Name = buyerName,
                     Surname = buyerSurname,
-                    GsmNumber = user.PhoneNumber ?? "+905551234567", // Telefon yoksa test numarası
+                    GsmNumber = recipientPhone ?? "+905551234567", // Telefon yoksa test numarası
                     Email = buyerEmail,
                     IdentityNumber = "11111111111", // Test için - gerçek projede kullanıcıdan alınmalı
-                    RegistrationAddress = user.Address ?? "Test Adres, Test Mahallesi, Test Sokak No:1",
+                    RegistrationAddress = recipientAddress ?? "Test Adres, Test Mahallesi, Test Sokak No:1",
                     City = "Istanbul",
                     Country = "Turkey",
                     Ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1",
@@ -273,10 +280,10 @@ namespace NaturalShop.API.Controllers
                 // 11. Shipping Address (Kargo adresi)
                 var shippingAddress = new Address
                 {
-                    ContactName = user.FullName ?? "Test User",
+                    ContactName = recipientName ?? "Test User",
                     City = "Istanbul",
                     Country = "Turkey",
-                    Description = user.Address ?? "Test Adres, Test Mahallesi, Test Sokak No:1 Daire:1",
+                    Description = recipientAddress ?? "Test Adres, Test Mahallesi, Test Sokak No:1 Daire:1",
                     ZipCode = "34000"
                 };
                 request.ShippingAddress = shippingAddress;
@@ -284,10 +291,10 @@ namespace NaturalShop.API.Controllers
                 // 12. Billing Address (Fatura adresi - shipping ile aynı)
                 var billingAddress = new Address
                 {
-                    ContactName = user.FullName ?? "Test User",
+                    ContactName = recipientName ?? "Test User",
                     City = "Istanbul",
                     Country = "Turkey",
-                    Description = user.Address ?? "Test Adres, Test Mahallesi, Test Sokak No:1 Daire:1",
+                    Description = recipientAddress ?? "Test Adres, Test Mahallesi, Test Sokak No:1 Daire:1",
                     ZipCode = "34000"
                 };
                 request.BillingAddress = billingAddress;

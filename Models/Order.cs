@@ -18,5 +18,10 @@ namespace NaturalShop.API.Models
 
         public decimal TotalAmount { get; set; }
         public string? IyzipayToken { get; set; }
+
+        // Teslimat bilgileri - checkout formundan gelir
+        public string? RecipientName { get; set; }
+        public string? RecipientPhone { get; set; }
+        public string? ShippingAddress { get; set; }
     }
 }
