@@ -161,9 +161,16 @@ namespace NaturalShop.API.Controllers
                 }
 
                 // 7. Order entity'sini oluştur ve kaydet (Transaction içinde)
-                Order order;
-                using (var transaction = await _db.Database.BeginTransactionAsync())
+                // NOT: UseNpgsql(...EnableRetryOnFailure...) aktif olduğu için elle BeginTransactionAsync
+                // kullanmadan önce CreateExecutionStrategy() ile sarmalamak gerekiyor, yoksa
+                // "does not support user-initiated transactions" hatası alınır.
+                Order order = null!;
+                IActionResult? orderCreationError = null;
+                var orderStrategy = _db.Database.CreateExecutionStrategy();
+
+                await orderStrategy.ExecuteAsync(async () =>
                 {
+                    using var transaction = await _db.Database.BeginTransactionAsync();
                     try
                     {
                         order = new Order
@@ -182,15 +189,20 @@ namespace NaturalShop.API.Controllers
                         await _db.SaveChangesAsync();
                         await transaction.CommitAsync();
 
-                        _logger.LogInformation("StartPayment: Sipariş oluşturuldu - OrderId: {OrderId}, TotalAmount: {TotalAmount}", 
+                        _logger.LogInformation("StartPayment: Sipariş oluşturuldu - OrderId: {OrderId}, TotalAmount: {TotalAmount}",
                             order.Id, totalAmount);
                     }
                     catch (Exception ex)
                     {
                         await transaction.RollbackAsync();
                         _logger.LogError(ex, "StartPayment: Sipariş oluşturulurken hata - UserId: {UserId}", userId);
-                        return StatusCode(500, new { message = "Sipariş oluşturulamadı. Lütfen tekrar deneyin." });
+                        orderCreationError = StatusCode(500, new { message = "Sipariş oluşturulamadı. Lütfen tekrar deneyin." });
                     }
+                });
+
+                if (orderCreationError != null)
+                {
+                    return orderCreationError;
                 }
 
                 // 8. Iyzico Options'ı al
@@ -445,8 +457,15 @@ namespace NaturalShop.API.Controllers
                 }
 
                 // 3) Ödeme durumunu güncelle ve stok düşür (Transaction içinde)
-                using (var transaction = await _db.Database.BeginTransactionAsync())
+                // NOT: UseNpgsql(...EnableRetryOnFailure...) aktif olduğu için elle BeginTransactionAsync
+                // kullanmadan önce CreateExecutionStrategy() ile sarmalamak gerekiyor, yoksa
+                // "does not support user-initiated transactions" hatası alınır.
+                IActionResult? callbackResult = null;
+                var callbackStrategy = _db.Database.CreateExecutionStrategy();
+
+                await callbackStrategy.ExecuteAsync(async () =>
                 {
+                    using var transaction = await _db.Database.BeginTransactionAsync();
                     try
                     {
                         // Ödeme zaten işlenmişse tekrar işleme
@@ -454,7 +473,8 @@ namespace NaturalShop.API.Controllers
                         {
                             _logger.LogInformation("Callback: Sipariş zaten ödendi - OrderId: {OrderId}", order.Id);
                             await transaction.CommitAsync();
-                            return Redirect($"{frontendUrl}/payment-result?orderId={order.Id}");
+                            callbackResult = Redirect($"{frontendUrl}/payment-result?orderId={order.Id}");
+                            return;
                         }
 
                         if (checkoutForm.Status == "success" && checkoutForm.PaymentStatus == "SUCCESS")
@@ -496,8 +516,13 @@ namespace NaturalShop.API.Controllers
                     {
                         await transaction.RollbackAsync();
                         _logger.LogError(ex, "Callback: Transaction hatası - OrderId: {OrderId}", order.Id);
-                        return Redirect($"{frontendUrl}/payment-result?status=error");
+                        callbackResult = Redirect($"{frontendUrl}/payment-result?status=error");
                     }
+                });
+
+                if (callbackResult != null)
+                {
+                    return callbackResult;
                 }
 
                 // 4) Kullanıcıyı React sonuç sayfasına yönlendir

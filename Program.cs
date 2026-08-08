@@ -79,9 +79,10 @@ builder.Services.AddScoped<ISmsService, SmsService>();
 
 var app = builder.Build();
 
-// --- 5. ARKA PLAN MIGRATION SİSTEMİ (BLOCKING OLMAYAN) ---
-// Uygulama hemen ayağa kalkar, Render "Timed Out" vermez.
-/* using (var scope = app.Services.CreateScope())
+// --- 5. BAŞLANGIÇ MIGRATION + SEED ---
+// Gerçek EF Core migration'ları var (Migrations/ klasörü), bu yüzden EnsureCreated()
+// değil Migrate() kullanılıyor: her deploy'da bekleyen migration'lar otomatik uygulanır.
+using (var scope = app.Services.CreateScope())
 {
 	var services = scope.ServiceProvider;
 	try
@@ -89,16 +90,11 @@ var app = builder.Build();
 		var context = services.GetRequiredService<AppDbContext>();
 		Console.WriteLine("📡 [DB] Bağlantı kontrol ediliyor...");
 
-		// Timeout süresini ayarla
 		context.Database.SetCommandTimeout(120);
 
-		// ÖNEMLİ: Daha önce EnsureCreated kullandıysan MigrateAsync hata verebilir.
-		// Şimdilik en garantisi şudur:
-		await context.Database.EnsureCreatedAsync();
+		await context.Database.MigrateAsync();
+		Console.WriteLine("🚀 [DB] Migration'lar uygulandı.");
 
-		Console.WriteLine("🚀 [DB] Tablolar kontrol edildi/oluşturuldu.");
-
-		// DbInitializer'ı burada çağırıyoruz
 		DbInitializer.Seed(app);
 
 		Console.WriteLine("💎 [DB] DbInitializer işlemi tamamlandı.");
@@ -106,11 +102,10 @@ var app = builder.Build();
 	catch (Exception ex)
 	{
 		Console.WriteLine($"⚠️ [DB] Kritik Başlangıç Hatası: {ex.Message}");
-		// İç hatayı da yazdıralım ki asıl sebebi görelim
 		if (ex.InnerException != null)
 			Console.WriteLine($"🔍 [DB] Detay: {ex.InnerException.Message}");
 	}
-}*/
+}
 
 
 // --- 6. MIDDLEWARE PIPELINE ---

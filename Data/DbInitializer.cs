@@ -15,10 +15,8 @@ namespace NaturalShop.API.Data
             {
                 var context = serviceScope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-                Console.WriteLine("🌱 Veritabanı oluşturuluyor/kontrol ediliyor...");
-                // Veritabanının oluşturulduğundan emin ol
-                context.Database.EnsureCreated();
-                Console.WriteLine("✅ Veritabanı hazır.");
+                // NOT: Tablolar EF Core migration'ları ile oluşturulur (bkz. Program.cs -> Database.MigrateAsync()).
+                // EnsureCreated() migration geçmişiyle çakışacağı için burada kullanılmıyor.
 
                 // Eğer tabloda ürün varsa işlemi durdur (mükerrer kayıt önleme)
                 var productCount = context.Products.Count();

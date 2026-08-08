@@ -110,44 +110,55 @@ namespace NaturalShop.API.Controllers
                 });
             }
 
-            using var transaction = await _db.Database.BeginTransactionAsync();
-            try
+            // NOT: UseNpgsql(...EnableRetryOnFailure...) aktif olduğu için elle BeginTransactionAsync
+            // kullanmadan önce CreateExecutionStrategy() ile sarmalamak gerekiyor, yoksa
+            // "does not support user-initiated transactions" hatası alınır.
+            var strategy = _db.Database.CreateExecutionStrategy();
+            IActionResult? result = null;
+
+            await strategy.ExecuteAsync(async () =>
             {
-                var order = new Order
+                using var transaction = await _db.Database.BeginTransactionAsync();
+                try
                 {
-                    UserId = userId,
-                    Status = "CashOnDelivery", // Kapıda ödeme - online ödeme adımı yok, sipariş direkt onaylanır
-                    CreatedAt = DateTime.UtcNow,
-                    TotalAmount = totalAmount,
-                    Items = orderItems,
-                    RecipientName = dto.RecipientName,
-                    RecipientPhone = dto.RecipientPhone,
-                    ShippingAddress = dto.ShippingAddress,
-                };
+                    var order = new Order
+                    {
+                        UserId = userId,
+                        Status = "CashOnDelivery", // Kapıda ödeme - online ödeme adımı yok, sipariş direkt onaylanır
+                        CreatedAt = DateTime.UtcNow,
+                        TotalAmount = totalAmount,
+                        Items = orderItems,
+                        RecipientName = dto.RecipientName,
+                        RecipientPhone = dto.RecipientPhone,
+                        ShippingAddress = dto.ShippingAddress,
+                    };
 
-                _db.Orders.Add(order);
+                    _db.Orders.Add(order);
 
-                // Stoktan düş (kapıda ödemede online ödeme callback'i olmadığı için stok burada düşürülür)
-                foreach (var item in dto.Items)
-                {
-                    var product = products.First(p => p.Id == item.ProductId);
-                    product.Stock -= item.Quantity;
+                    // Stoktan düş (kapıda ödemede online ödeme callback'i olmadığı için stok burada düşürülür)
+                    foreach (var item in dto.Items)
+                    {
+                        var product = products.First(p => p.Id == item.ProductId);
+                        product.Stock -= item.Quantity;
+                    }
+
+                    await _db.SaveChangesAsync();
+                    await transaction.CommitAsync();
+
+                    result = Ok(new
+                    {
+                        message = "Sipariş oluşturuldu ✅",
+                        orderId = order.Id,
+                    });
                 }
-
-                await _db.SaveChangesAsync();
-                await transaction.CommitAsync();
-
-                return Ok(new
+                catch (Exception)
                 {
-                    message = "Sipariş oluşturuldu ✅",
-                    orderId = order.Id,
-                });
-            }
-            catch (Exception)
-            {
-                await transaction.RollbackAsync();
-                return StatusCode(500, new { message = "Sipariş oluşturulamadı. Lütfen tekrar deneyin." });
-            }
+                    await transaction.RollbackAsync();
+                    result = StatusCode(500, new { message = "Sipariş oluşturulamadı. Lütfen tekrar deneyin." });
+                }
+            });
+
+            return result!;
         }
 
     }
