@@ -35,8 +35,17 @@ namespace NaturalShop.API.Services
                 """;
 
             // Render gibi platformlar giden SMTP portlarını (25/465/587) ağ seviyesinde
-            // engelliyor; bu yüzden production'da Resend'in HTTPS API'si tercih ediliyor.
-            // Resend anahtarı tanımlıysa onu kullan, yoksa SMTP'ye (yalnızca local/dev için) düş.
+            // engelliyor; bu yüzden production'da HTTPS tabanlı bir e-posta API'si tercih
+            // ediliyor. SendGrid (Single Sender Verification, domain gerekmez, tüm alıcılara
+            // gönderim yapabilir) öncelikli; Resend (yalnızca doğrulanmış domain'e sahip
+            // hesabın kendi e-postasına gönderebiliyor, bkz. sandbox kısıtlaması) onun
+            // yedeği; SMTP ise yalnızca local/dev için son çare.
+            var sendGridApiKey = _configuration["EmailSettings:SendGrid:ApiKey"];
+            if (!string.IsNullOrEmpty(sendGridApiKey))
+            {
+                return await SendViaSendGridAsync(sendGridApiKey, email, code, expiresInMinutes, body);
+            }
+
             var resendApiKey = _configuration["EmailSettings:Resend:ApiKey"];
             if (!string.IsNullOrEmpty(resendApiKey))
             {
@@ -49,7 +58,7 @@ namespace NaturalShop.API.Services
 
             if (string.IsNullOrEmpty(smtpHost) || string.IsNullOrEmpty(smtpUsername) || string.IsNullOrEmpty(smtpPassword))
             {
-                _logger.LogWarning("E-posta ayarları (Resend/SMTP) bulunamadı. Development modunda kod console'a yazdırılıyor.");
+                _logger.LogWarning("E-posta ayarları (SendGrid/Resend/SMTP) bulunamadı. Development modunda kod console'a yazdırılıyor.");
                 LogDevFallback(email, code, expiresInMinutes, null);
                 return true; // Development için true döndür
             }
@@ -93,6 +102,60 @@ namespace NaturalShop.API.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, $"Resend gönderim hatası: {ex.Message}");
+                LogDevFallback(email, code, expiresInMinutes, ex.Message);
+                return false;
+            }
+        }
+
+        private async Task<bool> SendViaSendGridAsync(string apiKey, string email, string code, int expiresInMinutes, string body)
+        {
+            var from = _configuration["EmailSettings:SendGrid:From"];
+            var fromName = _configuration["EmailSettings:SendGrid:FromName"] ?? "Köyümüzden Sofranıza";
+
+            if (string.IsNullOrEmpty(from))
+            {
+                _logger.LogError("EmailSettings:SendGrid:From tanımlı değil (Single Sender Verification ile doğrulanan adres olmalı).");
+                LogDevFallback(email, code, expiresInMinutes, "EmailSettings:SendGrid:From eksik");
+                return false;
+            }
+
+            try
+            {
+                var client = _httpClientFactory.CreateClient();
+                client.BaseAddress = new Uri("https://api.sendgrid.com/");
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+
+                var payload = new
+                {
+                    personalizations = new[]
+                    {
+                        new { to = new[] { new { email } } }
+                    },
+                    from = new { email = from, name = fromName },
+                    subject = "Giriş doğrulama kodunuz",
+                    content = new[]
+                    {
+                        new { type = "text/plain", value = body }
+                    }
+                };
+
+                using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+                var response = await client.PostAsync("v3/mail/send", content);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    _logger.LogInformation($"Doğrulama kodu e-postası SendGrid ile gönderildi: {email}");
+                    return true;
+                }
+
+                var responseBody = await response.Content.ReadAsStringAsync();
+                _logger.LogError($"SendGrid gönderim hatası ({(int)response.StatusCode}): {responseBody}");
+                LogDevFallback(email, code, expiresInMinutes, $"SendGrid {(int)response.StatusCode}: {responseBody}");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"SendGrid gönderim hatası: {ex.Message}");
                 LogDevFallback(email, code, expiresInMinutes, ex.Message);
                 return false;
             }
