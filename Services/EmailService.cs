@@ -1,5 +1,6 @@
-using System.Net;
-using System.Net.Mail;
+using MailKit.Net.Smtp;
+using MailKit.Security;
+using MimeKit;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -42,18 +43,13 @@ namespace NaturalShop.API.Services
 
             try
             {
-                using var client = new SmtpClient(smtpHost)
+                var message = new MimeMessage();
+                message.From.Add(new MailboxAddress(fromName, fromAddress!));
+                message.To.Add(MailboxAddress.Parse(email));
+                message.Subject = "Giriş doğrulama kodunuz";
+                message.Body = new TextPart("plain")
                 {
-                    Port = int.TryParse(smtpPort, out var port) ? port : 587,
-                    Credentials = new NetworkCredential(smtpUsername, smtpPassword),
-                    EnableSsl = enableSsl
-                };
-
-                using var message = new MailMessage
-                {
-                    From = new MailAddress(fromAddress!, fromName),
-                    Subject = "Giriş doğrulama kodunuz",
-                    Body = $"""
+                    Text = $"""
                         Merhaba,
 
                         Giriş yapmak için doğrulama kodunuz: {code}
@@ -61,12 +57,19 @@ namespace NaturalShop.API.Services
                         Bu kod {expiresInMinutes} dakika süreyle geçerlidir. Bu isteği siz yapmadıysanız bu e-postayı yok sayabilirsiniz.
 
                         Köyümüzden Sofranıza
-                        """,
-                    IsBodyHtml = false
+                        """
                 };
-                message.To.Add(email);
 
-                await client.SendMailAsync(message);
+                using var client = new SmtpClient();
+                // MailKit, host için dönen tüm IP adreslerini (IPv4/IPv6) sırayla dener; bu sayede
+                // Render gibi platformlarda IPv6 çıkışı çalışmasa bile IPv4'e otomatik düşer
+                // (System.Net.Mail.SmtpClient'ın aksine — o tek adresi dener ve "Network unreachable" ile patlar).
+                await client.ConnectAsync(smtpHost, int.TryParse(smtpPort, out var port) ? port : 587,
+                    enableSsl ? SecureSocketOptions.StartTls : SecureSocketOptions.None);
+                await client.AuthenticateAsync(smtpUsername, smtpPassword);
+                await client.SendAsync(message);
+                await client.DisconnectAsync(true);
+
                 _logger.LogInformation($"Doğrulama kodu e-postası gönderildi: {email}");
                 return true;
             }
