@@ -50,6 +50,13 @@ builder.Services.AddAuthentication(options =>
 	};
 });
 
+builder.Services.AddAuthorization(options =>
+{
+	// Admin panelini müşteri JWT'lerinden ayırmak için: sadece AdminController.Login'in
+	// ürettiği, "scope=admin" claim'i taşıyan token bu policy'yi geçer.
+	options.AddPolicy("AdminOnly", policy => policy.RequireClaim("scope", "admin"));
+});
+
 // --- 3. CORS AYARLARI ---
 builder.Services.AddCors(options => {
 	options.AddPolicy("AllowLocal", policy => {

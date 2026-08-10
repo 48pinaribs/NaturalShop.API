@@ -169,6 +169,58 @@ public class AuthController : ControllerBase
         }
     }
 
+    [HttpGet("me")]
+    [Authorize]
+    public async Task<IActionResult> GetMe()
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized(new { message = "Kullanıcı kimliği bulunamadı" });
+        }
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null)
+        {
+            return NotFound(new { message = "Kullanıcı bulunamadı" });
+        }
+
+        return Ok(new { user.Id, user.FullName, user.Email, user.Address });
+    }
+
+    [HttpPut("me")]
+    [Authorize]
+    public async Task<IActionResult> UpdateMe([FromBody] UpdateProfileDto dto)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId))
+        {
+            return Unauthorized(new { message = "Kullanıcı kimliği bulunamadı" });
+        }
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null)
+        {
+            return NotFound(new { message = "Kullanıcı bulunamadı" });
+        }
+
+        user.FullName = dto.FullName.Trim();
+        user.Address = string.IsNullOrWhiteSpace(dto.Address) ? null : dto.Address.Trim();
+
+        var result = await _userManager.UpdateAsync(user);
+        if (!result.Succeeded)
+        {
+            return BadRequest(new { message = "Profil güncellenemedi.", errors = result.Errors });
+        }
+
+        return Ok(new { user.Id, user.FullName, user.Email, user.Address });
+    }
+
     [HttpPost("verify-code")]
     public async Task<IActionResult> VerifyCode([FromBody] VerifyCodeDto dto)
     {

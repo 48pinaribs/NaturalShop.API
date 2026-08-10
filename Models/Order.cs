@@ -23,5 +23,10 @@ namespace NaturalShop.API.Models
         public string? RecipientName { get; set; }
         public string? RecipientPhone { get; set; }
         public string? ShippingAddress { get; set; }
+
+        // Kargo durumu - Status (ödeme durumu) alanından bağımsız, admin panelinden güncellenir
+        // Değerler: "Hazırlanıyor" (varsayılan) -> "Kargoya Verildi" -> "Teslim Edildi"
+        public string ShippingStatus { get; set; } = "Hazırlanıyor";
+        public string? TrackingNumber { get; set; }
     }
 }
