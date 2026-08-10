@@ -18,20 +18,25 @@ public class AuthController : ControllerBase
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IConfiguration _config;
     private readonly AppDbContext _context;
-    private readonly ISmsService _smsService;
+    private readonly IEmailService _emailService;
     private readonly ILogger<AuthController> _logger;
 
+    // Doğrulama kodunun geçerlilik süresi (dakika). Kod bu süre sonunda otomatik geçersiz olur.
+    private const int CodeExpiryMinutes = 10;
+    // Aynı e-postaya art arda kod isteği için bekleme süresi (dakika).
+    private const int CodeResendCooldownMinutes = 5;
+
     public AuthController(
-        UserManager<ApplicationUser> userManager, 
+        UserManager<ApplicationUser> userManager,
         IConfiguration config,
         AppDbContext context,
-        ISmsService smsService,
+        IEmailService emailService,
         ILogger<AuthController> logger)
     {
         _userManager = userManager;
         _config = config;
         _context = context;
-        _smsService = smsService;
+        _emailService = emailService;
         _logger = logger;
     }
 
@@ -96,26 +101,28 @@ public class AuthController : ControllerBase
 
         try
         {
-            // Son 5 dakika içinde gönderilmiş kod var mı kontrol et
+            var email = dto.Email.Trim().ToLowerInvariant();
+
+            // Son birkaç dakika içinde gönderilmiş kod var mı kontrol et
             var recentCode = await _context.VerificationCodes
-                .Where(v => v.PhoneNumber == dto.PhoneNumber && 
-                           !v.IsUsed && 
+                .Where(v => v.Email == email &&
+                           !v.IsUsed &&
                            v.ExpiresAt > DateTime.UtcNow &&
-                           v.CreatedAt > DateTime.UtcNow.AddMinutes(-5))
+                           v.CreatedAt > DateTime.UtcNow.AddMinutes(-CodeResendCooldownMinutes))
                 .OrderByDescending(v => v.CreatedAt)
                 .FirstOrDefaultAsync();
 
             if (recentCode != null)
             {
-                var remainingSeconds = (int)(recentCode.CreatedAt.AddMinutes(5) - DateTime.UtcNow).TotalSeconds;
+                var remainingSeconds = (int)(recentCode.CreatedAt.AddMinutes(CodeResendCooldownMinutes) - DateTime.UtcNow).TotalSeconds;
                 return BadRequest(new { message = $"Lütfen {remainingSeconds} saniye sonra tekrar deneyin." });
             }
 
             // Eski kullanılmamış kodları işaretle
             var oldCodes = await _context.VerificationCodes
-                .Where(v => v.PhoneNumber == dto.PhoneNumber && !v.IsUsed && v.ExpiresAt < DateTime.UtcNow)
+                .Where(v => v.Email == email && !v.IsUsed && v.ExpiresAt < DateTime.UtcNow)
                 .ToListAsync();
-            
+
             foreach (var oldCode in oldCodes)
             {
                 oldCode.IsUsed = true;
@@ -128,26 +135,32 @@ public class AuthController : ControllerBase
 
             var verificationCode = new VerificationCode
             {
-                PhoneNumber = dto.PhoneNumber,
+                Email = email,
                 Code = code,
                 CreatedAt = DateTime.UtcNow,
-                ExpiresAt = DateTime.UtcNow.AddMinutes(10), // 10 dakika geçerli
+                ExpiresAt = DateTime.UtcNow.AddMinutes(CodeExpiryMinutes),
                 IsUsed = false
             };
 
             _context.VerificationCodes.Add(verificationCode);
             await _context.SaveChangesAsync();
 
-            // SMS gönder
-            var smsSent = await _smsService.SendVerificationCodeAsync(dto.PhoneNumber, code);
+            // E-posta gönder
+            var emailSent = await _emailService.SendVerificationCodeAsync(email, code, CodeExpiryMinutes);
 
-            if (!smsSent)
+            if (!emailSent)
             {
-                _logger.LogWarning($"SMS gönderilemedi ama kod oluşturuldu: {dto.PhoneNumber}");
-                // Development modunda bile kod oluşturulduğu için başarılı dönebiliriz
+                _logger.LogWarning($"E-posta gönderilemedi: {email}");
+
+                // Gönderim başarısız oldu; bu kodu geçersiz say ki kullanıcı
+                // bekleme süresine takılmadan hemen tekrar deneyebilsin.
+                verificationCode.IsUsed = true;
+                await _context.SaveChangesAsync();
+
+                return StatusCode(502, new { message = "Doğrulama kodu e-postanıza gönderilemedi. Lütfen tekrar deneyin." });
             }
 
-            return Ok(new { message = "Doğrulama kodu gönderildi." });
+            return Ok(new { message = "Doğrulama kodu e-postanıza gönderildi.", expiresInMinutes = CodeExpiryMinutes });
         }
         catch (Exception ex)
         {
@@ -166,9 +179,11 @@ public class AuthController : ControllerBase
 
         try
         {
+            var email = dto.Email.Trim().ToLowerInvariant();
+
             // Geçerli kod bul
             var verificationCode = await _context.VerificationCodes
-                .Where(v => v.PhoneNumber == dto.PhoneNumber &&
+                .Where(v => v.Email == email &&
                            v.Code == dto.Code &&
                            !v.IsUsed &&
                            v.ExpiresAt > DateTime.UtcNow)
@@ -186,19 +201,17 @@ public class AuthController : ControllerBase
             await _context.SaveChangesAsync();
 
             // Kullanıcıyı bul veya oluştur
-            var user = await _userManager.FindByNameAsync(dto.PhoneNumber);
-            
+            var user = await _userManager.FindByEmailAsync(email);
+
             if (user == null)
             {
                 // Yeni kullanıcı oluştur
                 user = new ApplicationUser
                 {
-                    UserName = dto.PhoneNumber,
-                    PhoneNumber = dto.PhoneNumber,
+                    UserName = email,
+                    Email = email,
                     FullName = "Kullanıcı", // Varsayılan isim, sonra güncellenebilir
-                    Email = $"{dto.PhoneNumber}@naturalshop.local", // Geçici email
-                    EmailConfirmed = false,
-                    PhoneNumberConfirmed = true
+                    EmailConfirmed = true // Kod ile doğrulandı
                 };
 
                 var createResult = await _userManager.CreateAsync(user);
@@ -207,14 +220,10 @@ public class AuthController : ControllerBase
                     return BadRequest(new { message = "Kullanıcı oluşturulamadı.", errors = createResult.Errors });
                 }
             }
-            else
+            else if (!user.EmailConfirmed)
             {
-                // Mevcut kullanıcının telefon numarasını doğrula
-                if (!user.PhoneNumberConfirmed)
-                {
-                    user.PhoneNumberConfirmed = true;
-                    await _userManager.UpdateAsync(user);
-                }
+                user.EmailConfirmed = true;
+                await _userManager.UpdateAsync(user);
             }
 
             // JWT token oluştur
@@ -222,7 +231,7 @@ public class AuthController : ControllerBase
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id),
                 new Claim(ClaimTypes.Name, user.UserName ?? string.Empty),
-                new Claim(ClaimTypes.MobilePhone, dto.PhoneNumber)
+                new Claim(ClaimTypes.Email, user.Email ?? string.Empty)
             };
 
             var key = Encoding.UTF8.GetBytes(_config["JwtSettings:Key"] ?? throw new InvalidOperationException("JWT Key not found"));
@@ -239,7 +248,7 @@ public class AuthController : ControllerBase
             return Ok(new
             {
                 token = new JwtSecurityTokenHandler().WriteToken(token),
-                user = new { user.Id, user.FullName, user.PhoneNumber }
+                user = new { user.Id, user.FullName, user.Email }
             });
         }
         catch (Exception ex)

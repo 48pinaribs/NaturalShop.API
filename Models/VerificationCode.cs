@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NaturalShop.API.Models
 {
@@ -9,8 +8,8 @@ namespace NaturalShop.API.Models
         public int Id { get; set; }
 
         [Required]
-        [MaxLength(20)]
-        public string PhoneNumber { get; set; } = null!;
+        [MaxLength(256)]
+        public string Email { get; set; } = null!;
 
         [Required]
         [MaxLength(10)]

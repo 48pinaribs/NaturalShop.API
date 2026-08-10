@@ -49,7 +49,7 @@ The NaturalShop API follows a **layered architecture pattern** designed for scal
 ├─────────────────────────────────────────────────────────┤
 │  External Integrations                                  │
 │  ├─ Iyzipay (Payment Gateway)                          │
-│  ├─ Netgsm (SMS Service)                               │
+│  ├─ SMTP (Email Verification Service)                  │
 │  └─ Azure/Ngrok (Webhooks)                             │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -795,31 +795,31 @@ Service layer abstraction with DI container:
 
 ```csharp
 // Service interface
-public interface ISmsService
+public interface IEmailService
 {
-    Task<bool> SendVerificationCodeAsync(string phoneNumber, string code);
+    Task<bool> SendVerificationCodeAsync(string email, string code, int expiresInMinutes);
 }
 
 // Service implementation
-public class SmsService : ISmsService
+public class EmailService : IEmailService
 {
-    public async Task<bool> SendVerificationCodeAsync(string phoneNumber, string code)
+    public async Task<bool> SendVerificationCodeAsync(string email, string code, int expiresInMinutes)
     {
         // Implementation...
     }
 }
 
 // Registration
-builder.Services.AddScoped<ISmsService, SmsService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
 
 // Usage in controller
 public class AuthController
 {
-    private readonly ISmsService _smsService;
+    private readonly IEmailService _emailService;
 
-    public AuthController(ISmsService smsService)
+    public AuthController(IEmailService emailService)
     {
-        _smsService = smsService;
+        _emailService = emailService;
     }
 }
 ```
@@ -939,7 +939,7 @@ ADD CONSTRAINT check_quantity CHECK ("Quantity" > 0);
 | Service     | Purpose                            | Status        |
 | ----------- | ---------------------------------- | ------------- |
 | **Iyzipay** | Payment gateway (Visa, Mastercard) | ✅ Integrated |
-| **Netgsm**  | SMS verification service           | ⚙️ Configured |
+| **SMTP**    | Email verification service         | ⚙️ Not yet configured |
 | **Ngrok**   | Webhook tunneling (dev)            | ⚙️ Optional   |
 
 ### Development Tools
@@ -1004,7 +1004,7 @@ Microsoft.Extensions.Http (via DI)
       │ ┌──────────────▼──────────────────────┐   │
       │ │   Services Layer                    │   │
       │ ├──────────────────────────────────────┤  │
-      │ │ • ISmsService / SmsService          │   │
+      │ │ • IEmailService / EmailService      │   │
       │ │ • AutoMapper                        │   │
       │ │ • Business Logic & Validation       │   │
       │ └──────────────┬──────────────────────┘   │
@@ -1021,8 +1021,8 @@ Microsoft.Extensions.Http (via DI)
       ┌─────────────────┼──────────────────────────┐
       │                 │                          │
   ┌───▼──────┐  ┌──────▼───┐  ┌─────────────────┐ │
-  │PostgreSQL│  │ Iyzipay  │  │Netgsm SMS API   │ │
-  │Database  │  │ Gateway  │  │SMS Service      │ │
+  │PostgreSQL│  │ Iyzipay  │  │SMTP Server      │ │
+  │Database  │  │ Gateway  │  │Email Service    │ │
   └──────────┘  └──────────┘  └─────────────────┘ │
       │                                             │
       └─────────────────────────────────────────────┘
@@ -1143,14 +1143,14 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 
 ---
 
-#### 3. **Send SMS Verification Code**
+#### 3. **Send Email Verification Code**
 
 ```http
 POST /api/auth/send-code
 Content-Type: application/json
 
 {
-  "phoneNumber": "905551234567"
+  "email": "user@example.com"
 }
 ```
 
@@ -1160,9 +1160,8 @@ Content-Type: application/json
 public class SendCodeDto
 {
     [Required]
-    [RegularExpression(@"^90\d{10}$",
-        ErrorMessage = "Turkish phone format required: 90XXXXXXXXXX")]
-    public string PhoneNumber { get; set; }
+    [EmailAddress]
+    public string Email { get; set; }
 }
 ```
 
@@ -1170,7 +1169,8 @@ public class SendCodeDto
 
 ```json
 {
-  "message": "Doğrulama kodu gönderildi."
+  "message": "Doğrulama kodu e-postanıza gönderildi.",
+  "expiresInMinutes": 10
 }
 ```
 
@@ -1182,33 +1182,41 @@ public class SendCodeDto
   "message": "Lütfen 120 saniye sonra tekrar deneyin."
 }
 
-// 400 - Invalid phone format
+// 400 - Invalid email format
 {
-  "message": "Geçerli bir telefon numarası giriniz (90XXXXXXXXXX formatında)"
+  "message": "Geçerli bir e-posta adresi giriniz"
+}
+
+// 502 - Email could not actually be sent (SMTP configured but delivery failed)
+{
+  "message": "Doğrulama kodu e-postanıza gönderilemedi. Lütfen tekrar deneyin."
 }
 ```
 
 **Development Mode:**
-When SMS credentials aren't configured, codes print to console:
+When SMTP credentials aren't configured, codes print to console:
 
 ```
-=== SMS KODU (Development) ===
-Telefon: 905551234567
+=== DOĞRULAMA KODU (Development) ===
+E-posta: user@example.com
 Kod: 123456
-Süre: 2026-02-08 10:30:00
-=============================
+Geçerlilik: 10 dakika
+Zaman: 2026-08-10 10:30:00
+=====================================
 ```
+
+Codes expire **10 minutes** after being sent (`AuthController.CodeExpiryMinutes`), and a new code can only be requested every **5 minutes** per email (`CodeResendCooldownMinutes`).
 
 ---
 
-#### 4. **Verify SMS Code** _(Not implemented yet)_
+#### 4. **Verify Email Code**
 
 ```http
 POST /api/auth/verify-code
 Content-Type: application/json
 
 {
-  "phoneNumber": "905551234567",
+  "email": "user@example.com",
   "code": "123456"
 }
 ```
@@ -1219,8 +1227,8 @@ Content-Type: application/json
 public class VerifyCodeDto
 {
     [Required]
-    [RegularExpression(@"^90\d{10}$")]
-    public string PhoneNumber { get; set; }
+    [EmailAddress]
+    public string Email { get; set; }
 
     [Required]
     [StringLength(10, MinimumLength = 4)]
@@ -2158,8 +2166,8 @@ DTOs/                # Data Transfer Objects
 └─ VerifyCodeDto.cs
 
 Services/            # Business logic
-├─ ISmsService.cs
-└─ SmsService.cs
+├─ IEmailService.cs
+└─ EmailService.cs
 
 Data/                # Database context
 ├─ AppDbContext.cs
